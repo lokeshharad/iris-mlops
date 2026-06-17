@@ -1,0 +1,5 @@
+BASE_FOLDER = "iris-mlops"
+DATA_FOLDER = f"{BASE_FOLDER}/data"
+MODEL_FOLDER = f"{BASE_FOLDER}/models"
+DATA_FILE = "iris.data"
+MODEL_FILE = "model.pkl"
