@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 import logging
+import os
 from .reference import DATA_FOLDER, MODEL_FOLDER, DATA_FILE, MODEL_FILE
 
 logging.basicConfig(level=logging.INFO)
@@ -27,8 +28,19 @@ def train_model(X_train, y_train):
     logging.info("Model trained.")
     return model
 
+def ensure_folder_exists(folder_path):
+    """Create folder if it doesn't exist."""
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        logging.info(f"Folder created: {folder_path}")
+    else:
+        logging.info(f"Folder already exists: {folder_path}")
+
 def serialize_model(model, file_path):
     import joblib
+    # Ensure the directory exists before saving
+    folder_path = os.path.dirname(file_path)
+    ensure_folder_exists(folder_path)
     joblib.dump(model, file_path)
     logging.info(f"Model serialized to: {file_path}")
 
