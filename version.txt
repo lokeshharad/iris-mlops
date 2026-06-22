@@ -1,4 +1,4 @@
-VERSION: 1.2.0.3
+VERSION: 1.3.0.0
 
 VERSION FORMAT: MAJOR.MINOR.PATCH.BUILD
 
@@ -9,20 +9,20 @@ MAJOR (1):
   - Increment when there are breaking changes or complete overhauls
   - Current: 1 (OOP Trainer class with model selection and CV framework)
 
-MINOR (2):
+MINOR (3):
   - Represents new features, enhancements, or additions
   - Increment when adding new functionality without breaking existing code
-  - Current: 2 (Added model selection with 5 candidate models: LR, DT, RF, SVC, KNN)
+  - Current: 3 (Refactored training and prediction into packages; improved model loading)
 
 PATCH (0):
   - Represents bug fixes, performance improvements, and minor refinements
   - Increment for patches that don't introduce new features
   - Current: 0 (Latest stable release)
 
-BUILD (1):
+BUILD (0):
   - Represents internal build number or incremental improvements
   - Used for internal iterations, logging enhancements, and documentation updates
-  - Current: 1 (Added comprehensive logging throughout pipeline)
+  - Current: 0 (Package refactor and compatibility updates)
 
 === VERSION HISTORY ===
 
@@ -52,13 +52,22 @@ v1.2.0.2 - Release
     - README updated with exact CLI examples and CSV format
     - Incremented build number to reflect documentation, CLI, and predict enhancements
 
-v1.2.0.3 - Current Release
+v1.2.0.3 - Release
   Features & updates:
     - Model versioning: models saved with timestamped filenames in `models/`
     - `latest.txt` pointer file added to `models/` to indicate the most recent model
     - Training pipeline keeps only the latest 5 model files (old models auto-removed)
     - `Predictor.load_model` will automatically select the latest model when no explicit file is present
     - README updated to document versioning behavior
+
+v1.3.0.0 - Current Release
+  Features & updates:
+    - Refactored `src/train.py` and `src/predict.py` into packages: `src/train/` and `src/predict/` (module-based layout)
+    - `Trainer` and `Predictor` classes moved into `trainer.py` and `predictor.py` respectively and exposed via package `__init__.py` entrypoints
+    - Robust model-loading: prediction now skips incompatible pickle files and retries newer pickles
+    - CSV header auto-detection for batch prediction (supports headerless training-style CSVs)
+    - Label harmonization in evaluation to handle string vs numeric labels (avoids sklearn mixed-type errors)
+    - Improved logging, error handling, and package layout
 
 v1.1.0 - Proposed
   Features:
@@ -74,9 +83,9 @@ v1.0.0 - Initial
 
 === RELEASE NOTES ===
 
-Latest (v1.2.0.3):
-  - Model versioning: timestamped model files and `latest.txt` pointer
-  - Training pipeline retains only the latest 5 model artifacts
-  - `Predictor.load_model` automatically selects the latest model when none provided
-  - README updated to document CLI usage and model-versioning behavior
-  - Comprehensive logging and CLI dispatch improvements
+Latest (v1.3.0.0):
+  - Refactored repository to package modules (`src/train/`, `src/predict/`)
+  - Robust model loading and compatibility safeguards
+  - CSV header detection and label harmonization for batch evaluation
+  - README updates to reflect module refactor and usage
+  - Minor improvements: logging, CLI dispatch, and model retention management

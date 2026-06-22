@@ -11,7 +11,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 import logging
 import os
-from .reference import DATA_FOLDER, MODEL_FOLDER, DATA_FILE, MODEL_FILE
+import joblib
+from datetime import datetime
+
+from src.reference import DATA_FOLDER, MODEL_FOLDER, DATA_FILE, MODEL_FILE
 
 logging.basicConfig(level=logging.INFO)
 
@@ -134,9 +137,6 @@ class Trainer:
             logging.info(f"Folder already exists: {folder_path}")
 
     def serialize_model(self):
-        import joblib
-        from datetime import datetime
-
         folder_path = os.path.dirname(self.model_path)
         self._ensure_folder_exists(folder_path)
 
@@ -178,9 +178,9 @@ class Trainer:
             raise
 
     def run(self):
-        logging.info("\n" + "="*60)
+        logging.info("\n" + "=" * 60)
         logging.info("TRAINING PIPELINE STARTED")
-        logging.info("="*60)
+        logging.info("=" * 60)
         
         try:
             # Load and preprocess data
@@ -209,34 +209,10 @@ class Trainer:
             logging.info("\n[STAGE 6] Serializing trained model...")
             self.serialize_model()
             
-            logging.info("\n" + "="*60)
+            logging.info("\n" + "=" * 60)
             logging.info("TRAINING PIPELINE COMPLETED SUCCESSFULLY")
-            logging.info("="*60 + "\n")
+            logging.info("=" * 60 + "\n")
         except Exception as e:
             logging.error(f"\nTraining pipeline failed with error: {e}")
-            logging.error("="*60)
+            logging.error("=" * 60)
             raise
-
-
-def main():
-    logging.info("\n" + "#"*60)
-    logging.info("# IRIS MLOPS - MODEL TRAINING PIPELINE")
-    logging.info("#"*60)
-    
-    try:
-        data_path = os.path.join(DATA_FOLDER, DATA_FILE)
-        model_path = os.path.join(MODEL_FOLDER, MODEL_FILE)
-        logging.info(f"Configuration: DATA_FOLDER={DATA_FOLDER}, MODEL_FOLDER={MODEL_FOLDER}")
-
-        trainer = Trainer(data_path=data_path, model_path=model_path)
-        trainer.run()
-        logging.info("\n# PIPELINE EXECUTION COMPLETE")
-        logging.info("#"*60 + "\n")
-    except Exception as e:
-        logging.error(f"\n# PIPELINE EXECUTION FAILED: {e}")
-        logging.error("#"*60 + "\n")
-        raise
-
-
-if __name__ == '__main__':
-    main()

@@ -4,7 +4,7 @@ import joblib
 import warnings
 import logging
 import os
-from .reference import MODEL_FOLDER, MODEL_FILE
+from src.reference import MODEL_FOLDER, MODEL_FILE
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO)
@@ -46,18 +46,38 @@ class Predictor:
                 except Exception:
                     candidate = None
 
-            # If no latest pointer or candidate missing, pick most recent .pkl in folder
-            if candidate is None:
-                pkls = [os.path.join(model_folder, f) for f in os.listdir(model_folder) if f.endswith('.pkl')]
-                if not pkls:
-                    raise FileNotFoundError(f"No model files found in {model_folder}")
-                pkls.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-                candidate = pkls[0]
+            # Build list of candidate .pkl files to try (latest pointer first if present)
+            candidates = []
+            if candidate:
+                candidates.append(candidate)
 
-            logging.info(f"Loading most recent model file: {candidate}")
-            self.model = joblib.load(candidate)
-            logging.info(f"Model loaded successfully. Model type: {type(self.model).__name__}")
-            return self.model
+            pkls = [os.path.join(model_folder, f) for f in os.listdir(model_folder) if f.endswith('.pkl')]
+            # sort by modification time descending
+            pkls.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            for p in pkls:
+                if p not in candidates:
+                    candidates.append(p)
+
+            if not candidates:
+                raise FileNotFoundError(f"No model files found in {model_folder}")
+
+            last_err = None
+            for cand in candidates:
+                logging.info(f"Attempting to load model file: {cand}")
+                try:
+                    self.model = joblib.load(cand)
+                    logging.info(f"Model loaded successfully. Model type: {type(self.model).__name__}")
+                    return self.model
+                except Exception as e:
+                    logging.warning(f"Failed to load model {cand}: {e}. Trying next candidate if available.")
+                    last_err = e
+
+            # If we get here, none of the candidates loaded successfully
+            logging.error(f"All candidate model files failed to load in {model_folder}")
+            if last_err:
+                raise last_err
+            else:
+                raise FileNotFoundError(f"No model files found in {model_folder}")
         except Exception as e:
             logging.error(f"Failed to load model: {e}")
             raise
@@ -162,7 +182,7 @@ class Predictor:
             
             logging.info(f"Test Metrics: accuracy={acc:.4f}, precision={prec:.4f}, recall={rec:.4f}, f1={f1:.4f}")
             logging.info(f"Classification report (Test):\\n" + classification_report(y_test_eval, y_pred_eval, zero_division=0))
-
+            
             return {
                 "accuracy": acc,
                 "precision": prec,
@@ -204,134 +224,3 @@ class Predictor:
         except Exception as e:
             logging.error(f"Prediction pipeline failed: {e}")
             raise
-
-
-def main(predict_type, input_path=None, input_array=None):
-    """Main entry point for predictions.
-    
-    Args:
-        predict_type: 'single_predict' for single sample or 'batch_predict' for batch from CSV
-        input_path: Path to CSV file (for batch_predict)
-        input_array: Array of features (for single_predict)
-    """
-    logging.info("\n" + "#"*60)
-    logging.info("# IRIS MLOPS - PREDICTION PIPELINE")
-    logging.info("#"*60)
-    logging.info(f"Mode: {predict_type}")
-    
-    try:
-        model_path = os.path.join(MODEL_FOLDER, MODEL_FILE)
-        predictor = Predictor(model_path=model_path)
-        
-        if predict_type == 'batch_predict':
-            if input_path is None:
-                logging.error("CSV path required for batch_predict")
-                raise ValueError("CSV path not provided")
-            
-            logging.info(f"Loading batch data from: {input_path}")
-
-            # Detect whether CSV has a header row. Training data used headerless CSVs,
-            # so prefer reading with header=None when first row looks numeric.
-            try:
-                sample = pd.read_csv(input_path, nrows=1, header=None)
-                first_row = sample.iloc[0].tolist()
-
-                def _is_number(x):
-                    try:
-                        float(x)
-                        return True
-                    except Exception:
-                        return False
-
-                if all(_is_number(v) for v in first_row):
-                    df = pd.read_csv(input_path, header=None)
-                    logging.info("Detected headerless CSV; reading with header=None")
-                else:
-                    df = pd.read_csv(input_path, header=0)
-                    logging.info("Detected CSV with header row; reading with header=0")
-            except Exception:
-                logging.warning("Failed to auto-detect CSV header. Reading with header=None")
-                df = pd.read_csv(input_path, header=None)
-            
-            # Extract features (first 4 columns)
-            feature_cols = df.columns[:4]
-            X = df[feature_cols].values
-            logging.info(f"Loaded {len(X)} samples with {X.shape[1]} features")
-            
-            # Check if target column exists (5th column)
-            y = None
-            if len(df.columns) > 4:
-                y = df[df.columns[4]].values
-                logging.info("Target column found for evaluation")
-            
-            result = predictor.run_batch_prediction(X)
-            
-            # Evaluate if target available
-            if y is not None:
-                logging.info("\nEvaluating predictions...")
-                predictor.load_model()
-                eval_result = predictor.evaluate(X, y)
-                logging.info(f"Evaluation Metrics:")
-                logging.info(f"  Accuracy:  {eval_result['accuracy']:.4f}")
-                logging.info(f"  Precision: {eval_result['precision']:.4f}")
-                logging.info(f"  Recall:    {eval_result['recall']:.4f}")
-                logging.info(f"  F1 Score:  {eval_result['f1']:.4f}")
-                result['metrics'] = eval_result
-        
-        elif predict_type == 'single_predict':
-            if input_array is None:
-                input_array = [5.1, 3.5, 1.4, 0.2]  # Default iris sample
-                logging.info(f"Using default input sample: {input_array}")
-            
-            result = predictor.run_single_prediction(input_array)
-            logging.info(f"Result: {result}")
-        
-        else:
-            logging.error(f"Unknown predict type: {predict_type}")
-            raise ValueError(f"Invalid predict_type: {predict_type}")
-        
-        logging.info("\n# PIPELINE EXECUTION COMPLETE")
-        logging.info("#"*60 + "\n")
-        return result
-    except Exception as e:
-        logging.error(f"\n# PIPELINE EXECUTION FAILED: {e}")
-        logging.error("#"*60 + "\n")
-        raise
-
-
-if __name__ == '__main__':
-    import sys
-    
-    if len(sys.argv) < 2:
-        print("\nUsage:")
-        print("  python -m src.predict single_predict [feature1 feature2 feature3 feature4]")
-        print("  python -m src.predict batch_predict <csv_file_path>")
-        print("\nExamples:")
-        print("  python -m src.predict single_predict 5.1 3.5 1.4 0.2")
-        print("  python -m src.predict batch_predict data/iris_test.csv")
-        sys.exit(1)
-    
-    predict_type = sys.argv[1]
-    
-    if predict_type == 'single_predict':
-        input_array = None
-        if len(sys.argv) > 2:
-            try:
-                input_array = [float(x) for x in sys.argv[2:6]]
-            except ValueError:
-                logging.error("Invalid numeric input for single_predict")
-                sys.exit(1)
-        main(predict_type, input_array=input_array)
-    
-    elif predict_type == 'batch_predict':
-        if len(sys.argv) < 3:
-            logging.error("CSV file path required for batch_predict")
-            print("Usage: python -m src.predict batch_predict <csv_file_path>")
-            sys.exit(1)
-        csv_path = sys.argv[2]
-        main(predict_type, input_path=csv_path)
-    
-    else:
-        logging.error(f"Unknown predict type: {predict_type}")
-        print(f"Error: Unknown predict type '{predict_type}'")
-        sys.exit(1)

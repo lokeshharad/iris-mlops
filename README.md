@@ -17,8 +17,8 @@ iris-mlops/
 ├── version.txt         # Version information
 ├── README.md          # Documentation
 ├── src/
-│   ├── train.py        # Model training logic
-│   ├── predict.py      # Prediction logic
+│   ├── train/          # Training package (trainer.py + __init__.py)
+│   ├── predict/        # Prediction package (predictor.py + __init__.py)
 │   └── reference.py    # Configuration and constants
 ├── data/               # Data directory for storing datasets
 ├── models/             # Trained model storage
@@ -81,7 +81,7 @@ Notes:
 - `single_predict` requires `--features` with exactly 4 numeric values.
 - `batch_predict` requires `--csv` pointing to a CSV file. If the CSV contains a 5th column, the pipeline will compute evaluation metrics.
 
-You can also call `src.predict` directly for more advanced usage if desired (see `src/predict.py`).
+You can also call the `src.predict` package directly for more advanced usage (see `src/predict/__init__.py`).
 
 ## Model Architecture
 
@@ -117,7 +117,7 @@ OOP-based `Predictor` class with:
 
 ## Version
 
-Current version: **1.2.0.3**
+Current version: **1.3.0.0**
 
 See `version.txt` for detailed version information and component descriptions.
 
@@ -156,8 +156,8 @@ This repository contains an ML pipeline for the Iris dataset with a focus on rep
 Repository snapshot
 -------------------
 - `run_job.py` — single CLI entrypoint that dispatches operations (`train`, `single_predict`, `batch_predict`).
-- `src/train.py` — OOP `Trainer` implementing data load, CV-based model selection (5 models), test evaluation, and model serialization (versioned files).
-- `src/predict.py` — OOP `Predictor` implementing single and batch prediction, evaluation, and automatic latest-model selection.
+- `src/train/` — package exposing `Trainer` and `main()` for training (contains `trainer.py`).
+- `src/predict/` — package exposing `Predictor` and `main()` for prediction (contains `predictor.py`).
 - `src/reference.py` — small constants for `DATA_FOLDER`, `MODEL_FOLDER`, `DATA_FILE`, `MODEL_FILE`.
 - `data/` — data files. `iris_batch_test.csv` included as an example batch with target column for evaluation.
 - `models/` — serialized models (created by training). Training writes timestamped model files and a `latest.txt` pointer.
@@ -228,7 +228,7 @@ Files to check when debugging
 
 Version
 -------
-Current version: **1.2.0.3** — see `version.txt` for recent change notes (CLI, model versioning, predict refactor).
+Current version: **1.3.0.0** — see `version.txt` for recent change notes (module refactor, CSV and model-loading improvements).
 
 Troubleshooting
 ---------------
