@@ -1,4 +1,4 @@
-VERSION: 1.2.0.1
+VERSION: 1.2.0.3
 
 VERSION FORMAT: MAJOR.MINOR.PATCH.BUILD
 
@@ -26,7 +26,7 @@ BUILD (1):
 
 === VERSION HISTORY ===
 
-v1.2.0.1 - Current Release
+v1.2.0.1 - Release
   Features:
     - OOP-based Trainer class for modular training pipeline
     - Cross-validation with StratifiedKFold (5-fold default)
@@ -42,6 +42,24 @@ v1.2.0.1 - Current Release
     - Joblib model serialization
     - Extensive logging at all pipeline stages
 
+v1.2.0.2 - Release
+  Features & updates:
+    - Exposed CLI entrypoint `run_job.py` with argparse and operation dispatch
+      * Operations: `train`, `single_predict`, `batch_predict`
+    - `predict.py` refactored to `Predictor` class with `single_predict` and `batch_predict` support
+    - `run_job.py` uses dictionary dispatch (no if/else in main)
+    - Batch CSV support: `data/iris_batch_test.csv` with optional target column for evaluation
+    - README updated with exact CLI examples and CSV format
+    - Incremented build number to reflect documentation, CLI, and predict enhancements
+
+v1.2.0.3 - Current Release
+  Features & updates:
+    - Model versioning: models saved with timestamped filenames in `models/`
+    - `latest.txt` pointer file added to `models/` to indicate the most recent model
+    - Training pipeline keeps only the latest 5 model files (old models auto-removed)
+    - `Predictor.load_model` will automatically select the latest model when no explicit file is present
+    - README updated to document versioning behavior
+
 v1.1.0 - Proposed
   Features:
     - OOP Trainer class
@@ -56,9 +74,9 @@ v1.0.0 - Initial
 
 === RELEASE NOTES ===
 
-Latest (v1.2.0.1):
-  - Added comprehensive logging throughout training pipeline
-  - Log initialization, data loading, preprocessing, model selection, training, and serialization
-  - Added structured error handling with try-except blocks
-  - Improved visibility into each training stage
-  - Pipeline now clearly shows 6 execution stages with visual separators
+Latest (v1.2.0.3):
+  - Model versioning: timestamped model files and `latest.txt` pointer
+  - Training pipeline retains only the latest 5 model artifacts
+  - `Predictor.load_model` automatically selects the latest model when none provided
+  - README updated to document CLI usage and model-versioning behavior
+  - Comprehensive logging and CLI dispatch improvements

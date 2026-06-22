@@ -5,9 +5,7 @@ A machine learning operations project for training and making predictions on the
 ## Overview
 
 This project demonstrates a complete ML workflow with:
-- **Training**: Build and train a Random Forest model on the Iris dataset
-- **Prediction**: Make predictions on new data using the trained model
-- **Command-line interface**: Easy-to-use CLI for running training and prediction jobs
+- **Advanced Features**: Cross-validation, model selection, OOP architecture, comprehensive logging
 
 ## Project Structure
 
@@ -16,6 +14,8 @@ iris-mlops/
 ├── run_job.py           # Main entry point with CLI argument parsing
 ├── requirements.txt     # Python dependencies
 ├── .gitignore          # Git ignore patterns
+├── version.txt         # Version information
+├── README.md          # Documentation
 ├── src/
 │   ├── train.py        # Model training logic
 │   ├── predict.py      # Prediction logic
@@ -48,45 +48,78 @@ pip install -r requirements.txt
 
 ### Training the Model
 
-Train a new Random Forest model on the Iris dataset:
-
-```bash
-python run_job.py --operation train
-```
-
-or
+Train a new model (full pipeline: CV, model selection, final training):
 
 ```bash
 python run_job.py -op train
 ```
 
-This will:
-1. Read the Iris dataset from `data/iris.data`
-2. Preprocess the data (handle missing values)
-3. Train a Random Forest classifier with 100 estimators
-4. Save the model to `models/model.pkl`
+What this does:
+- Loads dataset from `data/iris.data` (see `src/reference.py` for paths)
+- Preprocesses data and runs 5-fold stratified CV on training folds
+- Performs model selection across 5 candidate models (LR, DT, RF, SVC, KNN)
+- Trains the selected model on the full training set and evaluates the test set
+- Serializes the final model to `models/model.pkl`
 
-### Making Predictions
+### Making Predictions (CLI via `run_job.py`)
 
-Make predictions on new data:
+The project exposes prediction modes through `run_job.py` to keep a single entrypoint.
 
-```bash
-python run_job.py --operation predict --input_array "[5.1, 3.5, 1.4, 0.2]"
-```
-
-or
+Single-sample prediction (provide four numeric features):
 
 ```bash
-python run_job.py -op predict -inp "[5.1, 3.5, 1.4, 0.2]"
+python run_job.py -op single_predict --features 5.1 3.5 1.4 0.2
 ```
 
-**Parameters:**
-- `--operation` / `-op`: `train` or `predict` (required)
-- `--input_array` / `-inp`: Input features as a string representation of a list for prediction (optional for train, required for predict)
+Batch prediction from a CSV file (first 4 columns are features; optional 5th column is `target` for evaluation):
 
-**Example input formats:**
-- Single sample: `"[5.1, 3.5, 1.4, 0.2]"`
-- Multiple samples: Pass array values matching Iris feature dimensions (sepal_length, sepal_width, petal_length, petal_width)
+```bash
+python run_job.py -op batch_predict --csv data/iris_batch_test.csv
+```
+
+Notes:
+- `single_predict` requires `--features` with exactly 4 numeric values.
+- `batch_predict` requires `--csv` pointing to a CSV file. If the CSV contains a 5th column, the pipeline will compute evaluation metrics.
+
+You can also call `src.predict` directly for more advanced usage if desired (see `src/predict.py`).
+
+## Model Architecture
+
+### Training Pipeline (train.py)
+
+OOP-based `Trainer` class with:
+- Data loading and preprocessing
+- Stratified train-test split (80-20)
+- Model selection with cross-validation
+- Final model training and evaluation
+- Model serialization with joblib
+
+### Prediction Pipeline (predict.py)
+
+OOP-based `Predictor` class with:
+- Single sample predictions
+- Batch predictions from CSV
+- Evaluation with metrics and classification reports
+- Probability predictions (when available)
+- Comprehensive error handling and logging
+
+### Model Versioning
+
+- Trained models are saved with timestamped filenames in the `models/` folder, e.g. `model_20260623T123456Z.pkl`.
+- A `latest.txt` file in `models/` points to the most recent model file.
+- The training pipeline keeps only the most recent 5 model files; older models are automatically removed to limit storage.
+- The prediction pipeline (`Predictor.load_model`) will automatically load the latest available model if an explicit model file is not provided.
+
+## Data Files
+
+- `data/iris.csv` - Original iris dataset
+- `data/iris_batch_test.csv` - Sample batch for testing predictions
+
+## Version
+
+Current version: **1.2.0.3**
+
+See `version.txt` for detailed version information and component descriptions.
 
 ## Data Format
 
@@ -116,85 +149,101 @@ python run_job.py -op predict -inp "[5.1, 3.5, 1.4, 0.2]"
 
 ### Training Pipeline
 ```
-raw_data → read_data() → preprocess_data() → train_model() → serialize_model()
+# Iris MLOps
+
+This repository contains an ML pipeline for the Iris dataset with a focus on reproducible training, model selection, versioned model artifacts, and simple CLI-driven prediction workflows.
+
+Repository snapshot
+-------------------
+- `run_job.py` — single CLI entrypoint that dispatches operations (`train`, `single_predict`, `batch_predict`).
+- `src/train.py` — OOP `Trainer` implementing data load, CV-based model selection (5 models), test evaluation, and model serialization (versioned files).
+- `src/predict.py` — OOP `Predictor` implementing single and batch prediction, evaluation, and automatic latest-model selection.
+- `src/reference.py` — small constants for `DATA_FOLDER`, `MODEL_FOLDER`, `DATA_FILE`, `MODEL_FILE`.
+- `data/` — data files. `iris_batch_test.csv` included as an example batch with target column for evaluation.
+- `models/` — serialized models (created by training). Training writes timestamped model files and a `latest.txt` pointer.
+- `requirements.txt` — Python package dependencies.
+- `version.txt` — project version and release notes.
+
+Quick start
+-----------
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
 ```
 
-1. **Read Data**: Load CSV file and assign column names
-2. **Preprocess**: Drop missing values, split features (X) and target (y)
-3. **Train**: Fit Random Forest model
-4. **Serialize**: Save trained model using joblib
+2. Train (runs full pipeline: CV, model selection, final training, serialization):
 
-### Prediction Pipeline
-```
-input_array → load_model() → predict() → output
+```bash
+python run_job.py -op train
 ```
 
-1. **Load Model**: Retrieve trained model from disk
-2. **Reshape Input**: Convert input array to proper format
-3. **Predict**: Generate predictions using the model
+3. Single prediction (provide four features):
 
-## Configuration
-
-Configuration constants are defined in `src/reference.py`:
-
-```python
-BASE_FOLDER = "iris-mlops"
-DATA_FOLDER = f"{BASE_FOLDER}/data"
-MODEL_FOLDER = f"{BASE_FOLDER}/models"
-DATA_FILE = "iris.data"
-MODEL_FILE = "model.pkl"
+```bash
+python run_job.py -op single_predict --features 5.1 3.5 1.4 0.2
 ```
 
-## Logging
+4. Batch prediction from CSV (first 4 columns are features; optional 5th column `target` for evaluation):
 
-All operations are logged with INFO level:
-- Data loading and preprocessing steps
-- Model training progress
-- Predictions made
+```bash
+python run_job.py -op batch_predict --csv data/iris_batch_test.csv
+```
 
-## Testing
+Data format
+-----------
+The CSV files expected by the pipeline should have at least the following columns (no header required for training data if using the default `data/iris.data`):
 
-Run tests from the project root:
+- sepal_length, sepal_width, petal_length, petal_width
+- Optional fifth column: `target` (0, 1, 2) — if present, batch prediction will also compute evaluation metrics.
+
+Model versioning
+----------------
+- Trained models are saved to the `models/` directory with timestamped filenames: `model_YYYYMMDDTHHMMSSZ.pkl`.
+- A `latest.txt` file is written to `models/` and contains the filename of the most recent model.
+- The training pipeline retains only the latest 5 model files; older files are removed automatically.
+- The prediction pipeline loads the model as follows:
+	1. If `models/model.pkl` (configured `MODEL_FILE`) exists and is passed, it is loaded.
+	2. Else, if `models/latest.txt` exists, its referenced file is loaded.
+	3. Else, the most recent `*.pkl` file in `models/` is selected.
+
+CLI reference (`run_job.py`)
+--------------------------
+- `-op train` — Run training pipeline (no extra args).
+- `-op single_predict --features a b c d` — Single prediction with four numeric features.
+- `-op batch_predict --csv path/to/file.csv` — Batch predictions from CSV; optional `target` column triggers evaluation.
+
+Design notes
+------------
+- The training pipeline runs cross-validation using `StratifiedKFold` and uses `cross_val_predict` for CV predictions during model selection.
+- Candidate models evaluated: LogisticRegression (with StandardScaler), DecisionTreeClassifier, RandomForestClassifier, SVC (with StandardScaler), KNeighborsClassifier (with StandardScaler).
+- Model selection picks the best model by weighted F1 score.
+- Logging is used extensively throughout the code for visibility into each pipeline stage.
+
+Files to check when debugging
+---------------------------
+- `models/latest.txt` — indicates the latest model file used for prediction.
+- `data/iris_batch_test.csv` — example CSV with target column for evaluation.
+- `version.txt` — project version and release notes.
+
+Version
+-------
+Current version: **1.2.0.3** — see `version.txt` for recent change notes (CLI, model versioning, predict refactor).
+
+Troubleshooting
+---------------
+- If training fails due to missing data: ensure `data/iris.data` or a suitable CSV exists in `data/`.
+- If prediction fails complaining about missing models: run training first to create model artifacts.
+- For single prediction, ensure four numeric features are provided.
+
+Running tests
+-------------
+Run unit tests (if present):
 
 ```bash
 pytest tests/
 ```
 
-## Project Workflow
-
-1. **Prepare data**: Place your Iris dataset in `data/` directory
-2. **Train model**: Run `python run_job.py -op train`
-3. **Make predictions**: Run `python run_job.py -op predict -inp "[5.1, 3.5, 1.4, 0.2]"`
-4. **Evaluate results**: Check logged outputs and predictions
-
-## Troubleshooting
-
-### Model File Not Found
-- Ensure `models/` directory exists
-- Train the model first with `--operation train`
-
-### Input Array Error
-- Verify input array format: `"[float1, float2, float3, float4]"`
-- Ensure 4 features are provided (matching Iris dataset)
-
-### Data File Not Found
-- Place `iris.data` in the `data/` directory
-- Verify CSV format matches expected structure
-
-## Future Enhancements
-
-- [ ] Model hyperparameter tuning
-- [ ] Cross-validation metrics
-- [ ] Multiple model comparison
-- [ ] RESTful API for predictions
-- [ ] Docker containerization
-- [ ] CI/CD pipeline integration
-- [ ] Model versioning and tracking
-
-## License
-
-[Add your license here]
-
-## Author
-
-[Add author information]
+Contact / Author
+----------------
+Add author/contact information here.

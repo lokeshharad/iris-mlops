@@ -135,12 +135,44 @@ class Trainer:
 
     def serialize_model(self):
         import joblib
-        logging.info(f"Serializing model to: {self.model_path}")
+        from datetime import datetime
+
+        folder_path = os.path.dirname(self.model_path)
+        self._ensure_folder_exists(folder_path)
+
+        # Create timestamped model filename for versioning
+        timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+        model_filename = f"model_{timestamp}.pkl"
+        model_fullpath = os.path.join(folder_path, model_filename)
+
+        logging.info(f"Serializing model to: {model_fullpath}")
         try:
-            folder_path = os.path.dirname(self.model_path)
-            self._ensure_folder_exists(folder_path)
-            joblib.dump(self.model, self.model_path)
-            logging.info(f"Model successfully serialized to: {self.model_path}")
+            joblib.dump(self.model, model_fullpath)
+
+            # Update latest pointer file
+            latest_file = os.path.join(folder_path, 'latest.txt')
+            try:
+                with open(latest_file, 'w') as f:
+                    f.write(model_filename)
+            except Exception:
+                logging.warning(f"Could not write latest pointer file: {latest_file}")
+
+            logging.info(f"Model successfully serialized to: {model_fullpath}")
+
+            # Keep only the most recent N models (keep_latest)
+            keep_latest = 5
+            all_models = [f for f in os.listdir(folder_path) if f.endswith('.pkl')]
+            all_models_full = [os.path.join(folder_path, f) for f in all_models]
+            # Sort by modification time descending
+            all_models_full.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            # Remove older models beyond keep_latest
+            for old_model in all_models_full[keep_latest:]:
+                try:
+                    os.remove(old_model)
+                    logging.info(f"Removed old model: {old_model}")
+                except Exception as e:
+                    logging.warning(f"Failed to remove old model {old_model}: {e}")
+
         except Exception as e:
             logging.error(f"Failed to serialize model: {e}")
             raise
