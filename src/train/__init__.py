@@ -1,6 +1,9 @@
 import logging
 import os
 
+import mlflow
+import mlflow.sklearn
+
 from src.train.trainer import Trainer
 from src.reference import DATA_FOLDER, MODEL_FOLDER, DATA_FILE, MODEL_FILE
 
@@ -16,8 +19,14 @@ def main():
         model_path = os.path.join(MODEL_FOLDER, MODEL_FILE)
         logging.info(f"Configuration: DATA_FOLDER={DATA_FOLDER}, MODEL_FOLDER={MODEL_FOLDER}")
 
-        trainer = Trainer(data_path=data_path, model_path=model_path)
-        trainer.run()
+        mlflow.set_experiment("iris-mlops")
+        mlflow.sklearn.autolog()
+        with mlflow.start_run(run_name="iris-training"):
+            mlflow.log_param("data_path", data_path)
+            mlflow.log_param("model_path", model_path)
+            trainer = Trainer(data_path=data_path, model_path=model_path)
+            mlflow.log_param("cv_splits", trainer.cv_splits)
+            trainer.run()
         logging.info("\n# PIPELINE EXECUTION COMPLETE")
         logging.info("#" * 60 + "\n")
     except Exception as e:

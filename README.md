@@ -117,7 +117,7 @@ OOP-based `Predictor` class with:
 
 ## Version
 
-Current version: **1.3.0.0**
+Current version: **1.3.0.1**
 
 See `version.txt` for detailed version information and component descriptions.
 
@@ -228,7 +228,7 @@ Files to check when debugging
 
 Version
 -------
-Current version: **1.3.0.0** — see `version.txt` for recent change notes (module refactor, CSV and model-loading improvements).
+Current version: **1.3.0.1** — see `version.txt` for recent change notes (MLflow integration for training and prediction).
 
 Troubleshooting
 ---------------
