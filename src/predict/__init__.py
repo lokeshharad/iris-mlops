@@ -1,11 +1,13 @@
-import logging
 import os
+# Ensure matplotlib uses a non-GUI backend to avoid Tkinter image cleanup errors
+os.environ.setdefault('MPLBACKEND', 'Agg')
+
+import logging
 import pandas as pd
 
 import mlflow
 
 from src.predict.predictor import Predictor
-from src.reference import MODEL_FOLDER, MODEL_FILE
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,8 +21,7 @@ def main(predict_type, input_path=None, input_array=None):
     logging.info("#" * 60)
     logging.info(f"Mode: {predict_type}")
     try:
-        model_path = os.path.join(MODEL_FOLDER, MODEL_FILE)
-        predictor = Predictor(model_path=model_path)
+        predictor = Predictor()
 
         mlflow.set_experiment("iris-mlops")
         with mlflow.start_run(run_name=f"iris-{predict_type}"):
@@ -102,7 +103,6 @@ def main(predict_type, input_path=None, input_array=None):
 
 if __name__ == '__main__':
     import sys
-    import pandas as pd
 
     if len(sys.argv) < 2:
         print("\nUsage:")

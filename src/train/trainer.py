@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_predict
 from sklearn.ensemble import RandomForestClassifier
@@ -10,11 +9,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 import logging
-import os
-import joblib
-from datetime import datetime
+import mlflow
+import mlflow.sklearn
+from mlflow.tracking import MlflowClient
 
-from src.reference import DATA_FOLDER, MODEL_FOLDER, DATA_FILE, MODEL_FILE
+from src.reference import MLFLOW_EXPERIMENT_NAME, MLFLOW_MODEL_STAGE
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,13 +21,12 @@ logging.basicConfig(level=logging.INFO)
 class Trainer:
     """OOP-style trainer that encapsulates data loading, training, CV and evaluation."""
 
-    def __init__(self, data_path, model_path, estimator=None, cv_splits=5):
+    def __init__(self, data_path, estimator=None, cv_splits=5):
         self.data_path = data_path
-        self.model_path = model_path
         self.estimator = estimator or RandomForestClassifier(n_estimators=100, random_state=42)
         self.cv_splits = cv_splits
         self.model = None
-        logging.info(f"Trainer initialized: data_path={data_path}, model_path={model_path}, cv_splits={cv_splits}")
+        logging.info(f"Trainer initialized: data_path={data_path}, cv_splits={cv_splits}")
 
     def read_data(self):
         logging.info(f"Reading data from: {self.data_path}")
@@ -50,19 +48,6 @@ class Trainer:
         logging.info(f"Data preprocessed. Feature matrix shape: {X.shape}, target shape: {y.shape}")
         logging.info(f"Target classes: {y.unique()}")
         return X, y
-
-    def evaluate_cv(self, X, y):
-        cv = StratifiedKFold(n_splits=self.cv_splits, shuffle=True, random_state=42)
-        y_pred = cross_val_predict(self.estimator, X, y, cv=cv)
-
-        acc = accuracy_score(y, y_pred)
-        prec = precision_score(y, y_pred, average='weighted', zero_division=0)
-        rec = recall_score(y, y_pred, average='weighted', zero_division=0)
-        f1 = f1_score(y, y_pred, average='weighted', zero_division=0)
-
-        logging.info(f"Cross-validation results (n_splits={self.cv_splits}): accuracy={acc:.4f}, precision={prec:.4f}, recall={rec:.4f}, f1={f1:.4f}")
-        logging.info("Classification report (CV):\n" + classification_report(y, y_pred, zero_division=0))
-        return {"accuracy": acc, "precision": prec, "recall": rec, "f1": f1}
 
     def model_selection(self, X, y, metric='f1'):
         """Evaluate a set of candidate models using CV and pick the best by `metric` (weighted)."""
@@ -128,61 +113,53 @@ class Trainer:
         logging.info("Classification report (Test):\n" + classification_report(y_true, y_pred, zero_division=0))
         return {"accuracy": acc, "precision": prec, "recall": rec, "f1": f1}
 
-    @staticmethod
-    def _ensure_folder_exists(folder_path):
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-            logging.info(f"Folder created: {folder_path}")
-        else:
-            logging.info(f"Folder already exists: {folder_path}")
-
-    def serialize_model(self):
-        folder_path = os.path.dirname(self.model_path)
-        self._ensure_folder_exists(folder_path)
-
-        # Create timestamped model filename for versioning
-        timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-        model_filename = f"model_{timestamp}.pkl"
-        model_fullpath = os.path.join(folder_path, model_filename)
-
-        logging.info(f"Serializing model to: {model_fullpath}")
+    def log_best_model_to_registry(self, best_name, selection_results, metric='f1'):
         try:
-            joblib.dump(self.model, model_fullpath)
+            best_metric_value = selection_results[best_name].get(metric, 0)
+            normalized_metric = f"{best_metric_value:.4f}".replace('.', '_')
+            dynamic_model_name = f"iris-{best_name}-{metric}-{normalized_metric}"
 
-            # Update latest pointer file
-            latest_file = os.path.join(folder_path, 'latest.txt')
-            try:
-                with open(latest_file, 'w') as f:
-                    f.write(model_filename)
-            except Exception:
-                logging.warning(f"Could not write latest pointer file: {latest_file}")
+            mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+            mlflow.log_param("selected_model", best_name)
+            mlflow.log_param("selection_metric", metric)
+            mlflow.log_param("selection_metric_value", float(best_metric_value))
 
-            logging.info(f"Model successfully serialized to: {model_fullpath}")
+            for name, metrics in selection_results.items():
+                for metric_name, value in metrics.items():
+                    mlflow.log_metric(f"{name}_{metric_name}", float(value))
 
-            # Keep only the most recent N models (keep_latest)
-            keep_latest = 5
-            all_models = [f for f in os.listdir(folder_path) if f.endswith('.pkl')]
-            all_models_full = [os.path.join(folder_path, f) for f in all_models]
-            # Sort by modification time descending
-            all_models_full.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-            # Remove older models beyond keep_latest
-            for old_model in all_models_full[keep_latest:]:
-                try:
-                    os.remove(old_model)
-                    logging.info(f"Removed old model: {old_model}")
-                except Exception as e:
-                    logging.warning(f"Failed to remove old model {old_model}: {e}")
+            mlflow.sklearn.log_model(self.model, artifact_path="model")
+            run_id = mlflow.active_run().info.run_id
+            registered_model = mlflow.register_model(f"runs:/{run_id}/model", dynamic_model_name)
 
+            client = MlflowClient()
+            client.transition_model_version_stage(
+                name=dynamic_model_name,
+                version=registered_model.version,
+                stage=MLFLOW_MODEL_STAGE,
+                archive_existing_versions=True,
+            )
+            logging.info(f"Registered best model '{best_name}' in MLflow as '{dynamic_model_name}' version {registered_model.version}")
+            return registered_model, dynamic_model_name
         except Exception as e:
-            logging.error(f"Failed to serialize model: {e}")
-            raise
+            logging.warning(f"Could not register model in MLflow registry: {e}")
+            return None, None
 
     def run(self):
         logging.info("\n" + "=" * 60)
         logging.info("TRAINING PIPELINE STARTED")
         logging.info("=" * 60)
-        
+
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+        active_run = mlflow.active_run()
+        started_new_run = False
+        if active_run is None:
+            mlflow.start_run(run_name="iris-training")
+            started_new_run = True
+
         try:
+            mlflow.log_param("data_path", self.data_path)
+
             # Load and preprocess data
             logging.info("\n[STAGE 1] Loading and preprocessing data...")
             data = self.read_data()
@@ -204,10 +181,11 @@ class Trainer:
             
             logging.info("\n[STAGE 5] Evaluating on test set...")
             y_test_pred = self.model.predict(X_test)
-            self.evaluate_test(y_test, y_test_pred)
+            test_metrics = self.evaluate_test(y_test, y_test_pred)
+            mlflow.log_metrics({f"test_{k}": float(v) for k, v in test_metrics.items()})
             
-            logging.info("\n[STAGE 6] Serializing trained model...")
-            self.serialize_model()
+            logging.info("\n[STAGE 6] Registering trained model...")
+            self.log_best_model_to_registry(best_name, selection_results, metric='f1')
             
             logging.info("\n" + "=" * 60)
             logging.info("TRAINING PIPELINE COMPLETED SUCCESSFULLY")
@@ -216,3 +194,6 @@ class Trainer:
             logging.error(f"\nTraining pipeline failed with error: {e}")
             logging.error("=" * 60)
             raise
+        finally:
+            if started_new_run:
+                mlflow.end_run()

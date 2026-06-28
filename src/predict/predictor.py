@@ -1,10 +1,9 @@
 import numpy as np
-import pandas as pd
-import joblib
 import warnings
 import logging
-import os
-from src.reference import MODEL_FOLDER, MODEL_FILE
+import mlflow
+import mlflow.sklearn
+from src.reference import MLFLOW_MODEL_STAGE
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO)
@@ -13,73 +12,26 @@ logging.basicConfig(level=logging.INFO)
 class Predictor:
     """OOP-style predictor for making predictions with trained models."""
 
-    def __init__(self, model_path):
-        self.model_path = model_path
+    def __init__(self):
         self.model = None
-        logging.info(f"Predictor initialized: model_path={model_path}")
+        logging.info("Predictor initialized")
 
     def load_model(self):
-        """Load trained model from disk."""
-        logging.info(f"Loading model from: {self.model_path}")
-        # If the provided model path exists, load it.
+        """Load the latest Production model from the MLflow registry."""
+        logging.info("Loading model from MLflow registry")
         try:
-            # If a specific model path exists, try loading it first.
-            if os.path.exists(self.model_path):
-                try:
-                    self.model = joblib.load(self.model_path)
-                    logging.info(f"Model loaded successfully from path. Model type: {type(self.model).__name__}")
-                    return self.model
-                except Exception as e:
-                    logging.warning(f"Failed loading configured model {self.model_path}: {e}. Will try latest model in folder.")
+            client = mlflow.tracking.MlflowClient()
+            versions = client.search_model_versions("name LIKE 'iris-%'")
+            if not versions:
+                raise FileNotFoundError("No registered MLflow models found")
 
-            # Otherwise try to read latest pointer in model folder
-            model_folder = os.path.dirname(self.model_path)
-            latest_file = os.path.join(model_folder, 'latest.txt')
-            candidate = None
-            if os.path.exists(latest_file):
-                try:
-                    with open(latest_file, 'r') as f:
-                        fname = f.read().strip()
-                        candidate = os.path.join(model_folder, fname)
-                        if not os.path.exists(candidate):
-                            candidate = None
-                except Exception:
-                    candidate = None
-
-            # Build list of candidate .pkl files to try (latest pointer first if present)
-            candidates = []
-            if candidate:
-                candidates.append(candidate)
-
-            pkls = [os.path.join(model_folder, f) for f in os.listdir(model_folder) if f.endswith('.pkl')]
-            # sort by modification time descending
-            pkls.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-            for p in pkls:
-                if p not in candidates:
-                    candidates.append(p)
-
-            if not candidates:
-                raise FileNotFoundError(f"No model files found in {model_folder}")
-
-            last_err = None
-            for cand in candidates:
-                logging.info(f"Attempting to load model file: {cand}")
-                try:
-                    self.model = joblib.load(cand)
-                    logging.info(f"Model loaded successfully. Model type: {type(self.model).__name__}")
-                    return self.model
-                except Exception as e:
-                    logging.warning(f"Failed to load model {cand}: {e}. Trying next candidate if available.")
-                    last_err = e
-
-            # If we get here, none of the candidates loaded successfully
-            logging.error(f"All candidate model files failed to load in {model_folder}")
-            if last_err:
-                raise last_err
-            else:
-                raise FileNotFoundError(f"No model files found in {model_folder}")
+            latest_version = max(versions, key=lambda m: int(m.version))
+            registry_uri = f"models:/{latest_version.name}/{MLFLOW_MODEL_STAGE}"
+            self.model = mlflow.sklearn.load_model(registry_uri)
+            logging.info(f"Model loaded successfully from MLflow registry. Model type: {type(self.model).__name__}")
+            return self.model
         except Exception as e:
-            logging.error(f"Failed to load model: {e}")
+            logging.error(f"Failed to load model from MLflow registry: {e}")
             raise
 
     def predict_single(self, input_array):

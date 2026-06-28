@@ -1,4 +1,4 @@
 DATA_FOLDER = "data"
-MODEL_FOLDER = "models"
 DATA_FILE = "iris.data"
-MODEL_FILE = "model.pkl"
+MLFLOW_EXPERIMENT_NAME = "iris-mlops"
+MLFLOW_MODEL_STAGE = "Production"
