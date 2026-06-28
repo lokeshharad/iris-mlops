@@ -5,8 +5,6 @@ os.environ.setdefault('MPLBACKEND', 'Agg')
 import logging
 import pandas as pd
 
-import mlflow
-
 from src.predict.predictor import Predictor
 
 logging.basicConfig(level=logging.INFO)
@@ -23,74 +21,66 @@ def main(predict_type, input_path=None, input_array=None):
     try:
         predictor = Predictor()
 
-        mlflow.set_experiment("iris-mlops")
-        with mlflow.start_run(run_name=f"iris-{predict_type}"):
-            mlflow.log_param("predict_type", predict_type)
+        if predict_type == 'batch_predict':
+            if input_path is None:
+                logging.error("CSV path required for batch_predict")
+                raise ValueError("CSV path not provided")
 
-            if predict_type == 'batch_predict':
-                if input_path is None:
-                    logging.error("CSV path required for batch_predict")
-                    raise ValueError("CSV path not provided")
+            logging.info(f"Loading batch data from: {input_path}")
+            # Detect headerless CSV similar to training data (header=None)
+            try:
+                sample = pd.read_csv(input_path, nrows=1, header=None)
+                first_row = sample.iloc[0].tolist()
 
-                logging.info(f"Loading batch data from: {input_path}")
-                # Detect headerless CSV similar to training data (header=None)
-                try:
-                    sample = pd.read_csv(input_path, nrows=1, header=None)
-                    first_row = sample.iloc[0].tolist()
+                def _is_number(x):
+                    try:
+                        float(x)
+                        return True
+                    except Exception:
+                        return False
 
-                    def _is_number(x):
-                        try:
-                            float(x)
-                            return True
-                        except Exception:
-                            return False
-
-                    if all(_is_number(v) for v in first_row):
-                        df = pd.read_csv(input_path, header=None)
-                        logging.info("Detected headerless CSV; reading with header=None")
-                    else:
-                        df = pd.read_csv(input_path, header=0)
-                        logging.info("Detected CSV with header row; reading with header=0")
-                except Exception:
-                    logging.warning("Failed to auto-detect CSV header. Reading with header=None")
+                if all(_is_number(v) for v in first_row):
                     df = pd.read_csv(input_path, header=None)
+                    logging.info("Detected headerless CSV; reading with header=None")
+                else:
+                    df = pd.read_csv(input_path, header=0)
+                    logging.info("Detected CSV with header row; reading with header=0")
+            except Exception:
+                logging.warning("Failed to auto-detect CSV header. Reading with header=None")
+                df = pd.read_csv(input_path, header=None)
 
-                feature_cols = df.columns[:4]
-                X = df[feature_cols].values
-                logging.info(f"Loaded {len(X)} samples with {X.shape[1]} features")
+            feature_cols = df.columns[:4]
+            X = df[feature_cols].values
+            logging.info(f"Loaded {len(X)} samples with {X.shape[1]} features")
 
-                y = None
-                if len(df.columns) > 4:
-                    y = df[df.columns[4]].values
-                    logging.info("Target column found for evaluation")
+            y = None
+            if len(df.columns) > 4:
+                y = df[df.columns[4]].values
+                logging.info("Target column found for evaluation")
 
-                result = predictor.run_batch_prediction(X)
+            result = predictor.run_batch_prediction(X)
 
-                if y is not None:
-                    logging.info("\nEvaluating predictions...")
-                    predictor.load_model()
-                    eval_result = predictor.evaluate(X, y)
-                    mlflow.log_metric("batch_accuracy", eval_result['accuracy'])
-                    mlflow.log_metric("batch_precision", eval_result['precision'])
-                    mlflow.log_metric("batch_recall", eval_result['recall'])
-                    mlflow.log_metric("batch_f1", eval_result['f1'])
-                    logging.info(f"Evaluation Metrics:")
-                    logging.info(f"  Accuracy:  {eval_result['accuracy']:.4f}")
-                    logging.info(f"  Precision: {eval_result['precision']:.4f}")
-                    logging.info(f"  Recall:    {eval_result['recall']:.4f}")
-                    logging.info(f"  F1 Score:  {eval_result['f1']:.4f}")
-                    result['metrics'] = eval_result
+            if y is not None:
+                logging.info("\nEvaluating predictions...")
+                predictor.load_model()
+                eval_result = predictor.evaluate(X, y)
+                logging.info("Evaluation Metrics:")
+                logging.info(f"  Accuracy:  {eval_result['accuracy']:.4f}")
+                logging.info(f"  Precision: {eval_result['precision']:.4f}")
+                logging.info(f"  Recall:    {eval_result['recall']:.4f}")
+                logging.info(f"  F1 Score:  {eval_result['f1']:.4f}")
+                result['metrics'] = eval_result
 
-            elif predict_type == 'single_predict':
-                if input_array is None:
-                    input_array = [5.1, 3.5, 1.4, 0.2]
-                    logging.info(f"Using default input sample: {input_array}")
-                result = predictor.run_single_prediction(input_array)
-                logging.info(f"Result: {result}")
+        elif predict_type == 'single_predict':
+            if input_array is None:
+                input_array = [5.1, 3.5, 1.4, 0.2]
+                logging.info(f"Using default input sample: {input_array}")
+            result = predictor.run_single_prediction(input_array)
+            logging.info(f"Result: {result}")
 
-            else:
-                logging.error(f"Unknown predict type: {predict_type}")
-                raise ValueError(f"Invalid predict_type: {predict_type}")
+        else:
+            logging.error(f"Unknown predict type: {predict_type}")
+            raise ValueError(f"Invalid predict_type: {predict_type}")
 
         logging.info("\n# PIPELINE EXECUTION COMPLETE")
         logging.info("#" * 60 + "\n")
